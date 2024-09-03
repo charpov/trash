@@ -1,0 +1,63 @@
+#!/usr/bin/env sh
+
+set -feu
+
+# If architecture is detected as macOS, switch to a Finder-based Python script.
+#
+# Otherwise, the strategy is to use mv to move files to a guessed trash location.
+# df, tail and sed are used to find the right trash.
+# A trailing slash in the source is removed (so as to mv a dir where a file already exists).
+# Renaming (based on date/time) is used to avoid clobbering.
+# Moving several files/dir with the same name within the same second will delay the function
+# (but it should still terminate).
+
+[ "$1" = "--version" ] && printf "version 1.0\n" && exit # used by zsh completion
+[ "$1" = "-h" -o "$1" = "--help" ] && printf "usage: trash [-q | --quiet] [files...]\n" && exit
+
+if [ "$(uname)" = Darwin ]; then
+  exec trash.py "$@"
+fi
+
+quiet=false
+if [ "$1" = "-q" -o "$1" = "--quiet" ]; then
+  quiet=true
+  shift
+fi
+
+for f in "$@"
+do
+  $quiet || printf "trashing %s" "$f"
+
+  file="${f%/}"
+  base="${file##*/}"
+  mount=$(df -P -- "$file" 2> /dev/null | tail -n +2 | sed 's/.* //')
+
+  if ! $quiet; then
+    [ -z "$mount" ] && printf ": no such file or directory" 1>&2
+    echo
+  fi
+
+  trash=""
+  case "X$mount" in
+    X/Volumes/*) trash="$mount/.Trashes/$(id -u)";;
+    X/) trash="$HOME/.Trash";;
+    X/System/*) trash="$HOME/.Trash";;
+    X) continue;;
+    *) trash="$mount/.Trash";;
+  esac
+
+  if [ ! -d "$trash" ]
+  then
+    printf "%s does not exist\n" "$trash" 1>&2
+    trash="$HOME/.Trash"
+    printf "using %s\n" "$trash" 1>&2
+  fi
+
+  dest=""
+  while true
+  do
+    /bin/mv -n -- "$file" "$trash/$dest" && [ ! -e "$file" ] && break
+    dest="${base}[$(date "+%y-%m-%d at %H.%M.%S")]"
+    $quiet || printf "renaming '%s' to '%s'\n" "$file" "$dest"
+  done
+done
