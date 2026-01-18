@@ -14,3 +14,16 @@ trash [-q | --quiet] [files and dirs...]
 
 `trash` invokes `trash.py` on macOS.
 Both scripts should reside in the same location.
+
+
+---
+
+## Edit
+
+macOS now includes a `/usr/bin/trash`, which makes these programs mostly obsolete and can be used as a basis for a function that simply cleans up the command's messages:
+
+```zsh
+trash () {
+  command trash -v "$@" | sed 's/# Moved \(.*\) to .*/trashing \1/'
+}
+```
